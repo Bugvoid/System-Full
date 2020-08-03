@@ -1,27 +1,78 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import api from "../../services/api";
-
+import socketio from "socket.io-client";
 import "./styles.css";
 
 export default function Dashboard() {
   const [spots, setSpots] = useState([]);
+  const [request, setRequests] = useState([]);
+
+  const user_id = localStorage.getItem("User");
+  const socket = useMemo(
+    () =>
+      socketio("http://localhost:3333", {
+        query: { user_id },
+      }),
+    [user_id]
+  );
+
+  useEffect(() => {
+    socket.on("booking_request", (data) => {
+      setRequests([...request, data]);
+    });
+  }, [request, socket]);
 
   useEffect(() => {
     async function loadSpots() {
       const user_id = localStorage.getItem("User");
       const response = await api.get("/dashboard", {
-        headers: { user_id }
+        headers: { user_id },
       });
       setSpots(response.data);
     }
 
     loadSpots();
   }, []);
+
+  async function handleAccept(id) {
+    await api.post(`/booking/${id}/approvals`);
+
+    setRequests(request.filter((request) => request._id !== id));
+  }
+  async function handleReject(id) {
+    await api.post(`/booking/${id}/rejections`);
+
+    setRequests(request.filter((request) => request._id !== id));
+  }
   return (
     <>
+      <ul className="notifications">
+        {request.map((request) => (
+          <li key={request._id}>
+            <p>
+              <strong>{request.user.email}</strong> está solicitando uma reserva
+              em <strong>{request.spot.company}</strong> para a data:{" "}
+              <strong>{request.date}</strong>
+            </p>
+            <button
+              className="accept"
+              onClick={() => handleAccept(request._id)}
+            >
+              ACEITAR
+            </button>
+            <button
+              className="reject"
+              onClick={() => handleReject(request._id)}
+            >
+              REJEITAR
+            </button>
+          </li>
+        ))}
+      </ul>
+
       <ul className="spot-list">
-        {spots.map(spot => (
+        {spots.map((spot) => (
           <li key={spot._id}>
             <header style={{ backgroundImage: `url(${spot.thumbnail_url})` }} />
             <strong>{spot.company}</strong>
